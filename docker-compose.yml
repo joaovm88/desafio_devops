@@ -1,0 +1,38 @@
+# Uso: cp .env.example .env && docker compose up -d --build
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo_data:/data/db          # persistência dos dados
+    networks: [backend]              # rede interna: Mongo não é exposto ao host
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  api:
+    image: ${IMAGE:-ecocity-api:local}
+    build: .
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy   # API só sobe com o banco pronto
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Staging}
+      MongoDb__ConnectionString: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/?authSource=admin
+      MongoDb__Database: ${MONGO_DB:-ecocity}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    networks: [backend]
+
+volumes:
+  mongo_data:
+
+networks:
+  backend:
